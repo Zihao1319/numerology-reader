@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer } from "recharts";
 
 // ─── TYPES & CONSTANTS ────────────────────────────────────────────────────────
-// trigger
+
 const AUSPICIOUS = ["生氣", "天醫", "延年", "伏位"];
 const INAUSPICIOUS = ["絕命", "五鬼", "六煞", "禍害"];
 
@@ -384,45 +384,67 @@ function analyzeNumber(input) {
 // ─── CLAUDE API ───────────────────────────────────────────────────────────────
 
 function buildBasePrompt(analysis) {
-  return `You are a 八宅飛星 numerology reader. Read this as a STORY — each pair leads to the next, cause and effect.
+  return `You are a 八宅飛星數字磁場 numerology reader with deep knowledge of Chinese metaphysics.
 
 Number: ${analysis.input}
 Score: ${analysis.finalScore}/100 (${analysis.scoreBand})
-吉 total intensity: ${analysis.auspiciousTotal} | 凶 total intensity: ${analysis.inauspiciousTotal}
+吉: ${analysis.auspiciousTotal} | 凶: ${analysis.inauspiciousTotal}
+
+八大磁場含義 (Eight Category Meanings):
+生氣 — 貴人、新機遇、突破、活力、新開始
+天醫 — 財富、療癒、滋養、智慧、財運亨通
+延年 — 長壽、耐力、領導力、承擔責任、持久成果
+伏位 — 穩定、蓄勢待發、隱藏潛力、等待時機、一鳴驚人 (elevator: amplifies/deflates preceding energy)
+絕命 — 決斷力、冒險精神、大起大落、敢拼敢闖、喜歡旅行或不安定 / also: 分離、突變、波動
+五鬼 — 鬼才、創意天賦、非常規思維、演藝體育宗教界天才 / also: 詭異、不穩定、暗中破壞
+六煞 — 人際磁場強、情商高、八面玲瓏、桃花旺、社交能力強 / also: 感情糾纏、矛盾衝突
+禍害 — 口才好、說服力強、天生業務員、談判高手、891=說話能力帶來成果 / also: 口舌是非、爭執
+
+重要原則: 凶星代表才華與能量，不一定是壞事。讀數字要看組合與context，不能單純論吉凶。
 
 SEQUENCE:
 ${analysis.brief}
 
-Write exactly two sections, headers on their own line, 1–2 sentences each:
+Write exactly two sections, headers on their own line, 1–2 sentences each.
+Output in English. Be direct and analytical — name each pair explicitly, state what it means plainly, connect cause-effect.
+No metaphors. No poetic language. Intensity matters — PEAK is stronger than MILD.
 
 JOURNEY READING
-Tell the story sequentially. First pair = what opens. Each pair = what follows. Last pair = how it resolves.
-Use cause-effect language: "which leads to...", "but then...", "ultimately...".
-Intensity matters — PEAK hits harder than MILD.
+Read sequentially. First pair = opening energy. Each pair = what follows. Last pair = outcome.
+Use plain cause-effect: "which leads to", "followed by", "ending with".
 
 CUMULATIVE READING
-One sentence: overall energy of this number.
-One sentence: what it fundamentally represents.
-
-No bullet points. No filler. Be vivid and specific.`;
+One sentence: overall energy. One sentence: what this number fundamentally represents.`;
 }
 
 function buildAspectPrompt(analysis, aspect) {
-  return `You are a 八宅飛星 numerology reader.
+  return `You are a 八宅飛星數字磁場 numerology reader with deep knowledge of Chinese metaphysics.
 
 Number: ${analysis.input} | Score: ${analysis.finalScore}/100 (${analysis.scoreBand})
+
+八大磁場含義:
+生氣 — 貴人、新機遇、突破、活力
+天醫 — 財富、療癒、滋養、智慧
+延年 — 長壽、耐力、領導力、責任
+伏位 — 穩定、蓄勢待發、電梯效應（放大或縮小前一個磁場）
+絕命 — 決斷、冒險、大起大落 / 分離、波動、喜歡旅行不安定
+五鬼 — 鬼才、創意 / 詭異、不穩定
+六煞 — 人際磁場、情商、桃花 / 糾纏、矛盾
+禍害 — 口才、說服力、業務能力 / 口舌是非、爭執
+
+凶星 = 才華能量，不一定壞。看組合和context決定正面還是負面表達。
 
 SEQUENCE:
 ${analysis.brief}
 
-Write exactly one section, header on its own line, 2–3 sentences max:
+Write exactly one section, header on its own line, 2–3 sentences max.
+Output in English. Name each pair explicitly. Direct and analytical, no metaphors.
 
 ${aspect.toUpperCase()} INTERPRETATION
 ${ASPECT_GUIDANCE[aspect]}
-Read it as a journey — what does the sequence mean specifically for ${aspect}?
-Reference actual pairs and their transitions. Intensity matters.
-
-No bullet points. No filler.`;
+Read as a journey — what does this sequence mean for ${aspect} specifically?
+For 凶 categories: consider both light side (talent/capability) and shadow side based on context.
+Intensity matters — PEAK hits harder than MILD.`;
 }
 
 async function callClaude(prompt) {
@@ -431,8 +453,8 @@ async function callClaude(prompt) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt }),
   });
-  if (!response.ok) throw new Error(`API error: ${response.status}`);
   const data = await response.json();
+  if (!response.ok) throw new Error(data.error || `API error ${response.status}`);
   return data.text ?? "";
 }
 
@@ -896,7 +918,8 @@ function ComparePanel() {
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [mode, setMode] = useState("read"); // "read" | "compare"
+  const [mode, setMode] = useState("read");
+
   const [input, setInput] = useState("");
   const [aspect, setAspect] = useState(null);
   const [analysis, setAnalysis] = useState(null);
@@ -905,6 +928,8 @@ export default function App() {
   const [loadingBase, setLoadingBase] = useState(false);
   const [loadingAspect, setLoadingAspect] = useState(false);
   const [error, setError] = useState(null);
+
+
 
   const handleAnalyze = async () => {
     if (!input) return;
@@ -920,7 +945,7 @@ export default function App() {
       const text = await callClaude(buildBasePrompt(result));
       setBaseInterpretation(text);
     } catch (e) {
-      setError("Failed to get reading. Please try again.");
+      setError(`Base reading failed: ${e.message}`);
     } finally {
       setLoadingBase(false);
     }
@@ -931,7 +956,7 @@ export default function App() {
         const text = await callClaude(buildAspectPrompt(result, aspect));
         setAspectInterpretation(text);
       } catch (e) {
-        setError("Failed to get aspect reading.");
+        setError(`Aspect reading failed: ${e.message}`);
       } finally {
         setLoadingAspect(false);
       }
@@ -948,7 +973,7 @@ export default function App() {
       const text = await callClaude(buildAspectPrompt(analysis, newAspect));
       setAspectInterpretation(text);
     } catch (e) {
-      setError("Failed to get aspect reading.");
+      setError(`Aspect reading failed: ${e.message}`);
     } finally {
       setLoadingAspect(false);
     }
@@ -983,6 +1008,7 @@ export default function App() {
       </div>
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px" }}>
+
         {mode === "compare" ? (
           <ComparePanel />
         ) : (
