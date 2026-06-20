@@ -1,5 +1,5 @@
 export const config = {
-  maxDuration: 20,
+  maxDuration: 30,
 };
 
 const HEADERS = { "Content-Type": "application/json" };
