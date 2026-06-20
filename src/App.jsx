@@ -453,9 +453,12 @@ async function callClaude(prompt) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt }),
   });
-  const data = await response.json();
+  const raw = await response.text();
+  let data;
+  try { data = JSON.parse(raw); }
+  catch { throw new Error(`Non-JSON response: ${raw.slice(0, 80)}`); }
   if (!response.ok) throw new Error(data.error || `API error ${response.status}`);
-  return data.text ?? "";
+  return { text: data.text ?? "", provider: data.provider ?? "unknown" };
 }
 
 // ─── COMPONENTS ───────────────────────────────────────────────────────────────
@@ -919,7 +922,8 @@ function ComparePanel() {
 
 export default function App() {
   const [mode, setMode] = useState("read");
-
+  const [apiKey, setApiKey] = useState("");
+  const [keySet, setKeySet] = useState(false);
   const [input, setInput] = useState("");
   const [aspect, setAspect] = useState(null);
   const [analysis, setAnalysis] = useState(null);
@@ -928,22 +932,30 @@ export default function App() {
   const [loadingBase, setLoadingBase] = useState(false);
   const [loadingAspect, setLoadingAspect] = useState(false);
   const [error, setError] = useState(null);
+  const [provider, setProvider] = useState(null); // track which model responded
 
-
+  const handleSetKey = () => {
+    if (apiKey.trim()) {
+      window.OPENROUTER_API_KEY = apiKey.trim();
+      setKeySet(true);
+    }
+  };
 
   const handleAnalyze = async () => {
     if (!input) return;
     setError(null);
     setBaseInterpretation(null);
     setAspectInterpretation(null);
+    setProvider(null);
 
     const result = analyzeNumber(input);
     setAnalysis(result);
     setLoadingBase(true);
 
     try {
-      const text = await callClaude(buildBasePrompt(result));
+      const { text, provider: p } = await callClaude(buildBasePrompt(result));
       setBaseInterpretation(text);
+      setProvider(p);
     } catch (e) {
       setError(`Base reading failed: ${e.message}`);
     } finally {
@@ -953,7 +965,7 @@ export default function App() {
     if (aspect) {
       setLoadingAspect(true);
       try {
-        const text = await callClaude(buildAspectPrompt(result, aspect));
+        const { text } = await callClaude(buildAspectPrompt(result, aspect));
         setAspectInterpretation(text);
       } catch (e) {
         setError(`Aspect reading failed: ${e.message}`);
@@ -970,7 +982,7 @@ export default function App() {
     setLoadingAspect(true);
     setError(null);
     try {
-      const text = await callClaude(buildAspectPrompt(analysis, newAspect));
+      const { text } = await callClaude(buildAspectPrompt(analysis, newAspect));
       setAspectInterpretation(text);
     } catch (e) {
       setError(`Aspect reading failed: ${e.message}`);
@@ -993,22 +1005,68 @@ export default function App() {
           </div>
         </div>
 
-        {/* Mode tabs */}
-        <div style={{ display: "flex", gap: 4, background: "#1e293b", borderRadius: 8, padding: 4 }}>
-          {[["read", "📖 Read"], ["compare", "⚖️ Compare"]].map(([m, label]) => (
-            <button key={m} onClick={() => setMode(m)} style={{
-              padding: "6px 16px", borderRadius: 6, border: "none",
-              background: mode === m ? "#334155" : "transparent",
-              color: mode === m ? "#f1f5f9" : "#64748b",
-              fontSize: 13, fontWeight: mode === m ? 600 : 400,
-              cursor: "pointer", transition: "all 0.15s",
-            }}>{label}</button>
-          ))}
+        {/* Mode tabs + provider badge */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {provider && (
+            <div style={{
+              fontSize: 11, padding: "4px 10px", borderRadius: 20,
+              background: provider.includes("qwen") ? "rgba(139,92,246,0.15)" : "rgba(245,158,11,0.15)",
+              border: `1px solid ${provider.includes("qwen") ? "#7c3aed" : "#d97706"}`,
+              color: provider.includes("qwen") ? "#a78bfa" : "#f59e0b",
+              letterSpacing: "0.05em",
+            }}>
+              {provider.includes("qwen") ? "🟣 Qwen" : "🟡 Claude"} · {provider.split("/").pop()}
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 4, background: "#1e293b", borderRadius: 8, padding: 4 }}>
+            {[["read", "📖 Read"], ["compare", "⚖️ Compare"]].map(([m, label]) => (
+              <button key={m} onClick={() => setMode(m)} style={{
+                padding: "6px 16px", borderRadius: 6, border: "none",
+                background: mode === m ? "#334155" : "transparent",
+                color: mode === m ? "#f1f5f9" : "#64748b",
+                fontSize: 13, fontWeight: mode === m ? 600 : 400,
+                cursor: "pointer", transition: "all 0.15s",
+              }}>{label}</button>
+            ))}
+          </div>
         </div>
       </div>
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px" }}>
 
+        {/* API Key Setup */}
+        {!keySet && (
+          <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 12, padding: 20, marginBottom: 24, display: "flex", gap: 12, alignItems: "center" }}>
+            <span style={{ fontSize: 13, color: "#64748b", flexShrink: 0 }}>🔑 OpenRouter Key</span>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={e => setApiKey(e.target.value)}
+              placeholder="sk-or-..."
+              onKeyDown={e => e.key === "Enter" && handleSetKey()}
+              style={{
+                flex: 1, background: "#1e293b", border: "1px solid #334155",
+                borderRadius: 8, padding: "8px 12px", fontSize: 13,
+                color: "#f1f5f9", outline: "none", fontFamily: "monospace",
+              }}
+            />
+            <button onClick={handleSetKey} style={{
+              padding: "8px 16px", borderRadius: 8, border: "none",
+              background: "#f59e0b", color: "#0a0f1e",
+              fontSize: 13, fontWeight: 700, cursor: "pointer", flexShrink: 0,
+            }}>Set Key</button>
+          </div>
+        )}
+
+        {keySet && (
+          <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 12, color: "#16a34a" }}>✓ OpenRouter connected</span>
+            <button onClick={() => { setKeySet(false); setApiKey(""); window.OPENROUTER_API_KEY = ""; }}
+              style={{ fontSize: 11, color: "#475569", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+              change key
+            </button>
+          </div>
+        )}
         {mode === "compare" ? (
           <ComparePanel />
         ) : (
