@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer } from "recharts";
 
 // ─── TYPES & CONSTANTS ────────────────────────────────────────────────────────
-
+// trigger
 const AUSPICIOUS = ["生氣", "天醫", "延年", "伏位"];
 const INAUSPICIOUS = ["絕命", "五鬼", "六煞", "禍害"];
 
