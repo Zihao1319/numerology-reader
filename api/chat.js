@@ -2,22 +2,18 @@ export const config = {
   maxDuration: 30,
 };
 
-const HEADERS = { "Content-Type": "application/json" };
-
-export default async function handler(req) {
+export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) {
-    return new Response(JSON.stringify({ error: "API key not configured" }), {
-      status: 500, headers: HEADERS,
-    });
+    return res.status(500).json({ error: "API key not configured" });
   }
 
   try {
-    const { prompt } = await req.json();
+    const { prompt } = req.body;
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -36,18 +32,16 @@ export default async function handler(req) {
     const raw = await response.text();
     let data;
     try { data = JSON.parse(raw); }
-    catch { throw new Error(`Non-JSON response: ${raw.slice(0, 80)}`); }
+    catch { return res.status(500).json({ error: `Non-JSON: ${raw.slice(0, 80)}` }); }
 
-    if (!response.ok) throw new Error(data.error?.message ?? `API error ${response.status}`);
+    if (!response.ok) {
+      return res.status(response.status).json({ error: data.error?.message ?? `API error ${response.status}` });
+    }
 
     const text = data.content?.map(c => c.type === "text" ? c.text : "").join("") ?? "";
+    return res.status(200).json({ text, provider: "anthropic/claude-sonnet-4-6" });
 
-    return new Response(JSON.stringify({ text, provider: "anthropic/claude-sonnet-4-6" }), {
-      status: 200, headers: HEADERS,
-    });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500, headers: HEADERS,
-    });
+    return res.status(500).json({ error: err.message });
   }
 }
